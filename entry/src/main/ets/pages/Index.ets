@@ -1,301 +1,200 @@
-import { continuationManager } from '@kit.AbilityKit'
-import { promptAction } from '@kit.ArkUI'
-import { GameState } from '../common/GameState'
-import { GameStateManager } from '../common/GameStateManager'
+import { router } from '@kit.ArkUI'
 
 @Entry
 @Component
-struct AdvancedShootingGame {
-  @State page: string = 'home'
-  @State level: number = 1
-  @State score: number = 0
-  @State hp: number = 100
-  @State targetX: number = 150
-  @State targetY: number = 300
-  @State timeLeft: number = 10
+struct Index {
   @State currentBreakpoint: string = 'sm'
 
-  private timer: number | null = null
-  private countdownTimer: number | null = null
-  private stateManager: GameStateManager = GameStateManager.getInstance()
-
   aboutToAppear(): void {
-    this.stateManager.onRestored((state: GameState) => {
-      this.applyRestoredState(state)
-    })
-  }
-
-  aboutToDisappear(): void {
-    this.stopAllTimers()
-  }
-
-  syncState(): void {
-    this.stateManager.saveToAppStorage(new GameState(
-      this.page, this.level, this.score, this.hp, this.targetX, this.targetY, this.timeLeft
-    ))
-  }
-
-  applyRestoredState(state: GameState): void {
-    this.page = state.page ?? 'game'
-    this.level = state.level ?? 1
-    this.score = state.score ?? 0
-    this.hp = state.hp ?? 100
-    this.targetX = state.targetX ?? 150
-    this.targetY = state.targetY ?? 300
-    this.timeLeft = state.timeLeft ?? 10
-    if (this.page === 'game') {
-      this.resumeGameTimers()
-      promptAction.showToast({ message: '游戏状态已从其他设备流转恢复' })
-    }
-  }
-
-  hit(damage: number): void {
-    if (this.hp <= 0) {
+    // 检查是否有流转恢复的状态，如果有则直接跳转到对应应用
+    const gameState = AppStorage.get('gameState')
+    if (gameState && gameState['page'] === 'game') {
+      router.pushUrl({ url: 'pages/ShootingGame' })
       return
     }
-    this.hp -= damage
-    this.score += damage
-    this.syncState()
-
-    if (this.hp <= 0) {
-      this.hp = 0
-      this.stopAllTimers()
-      this.page = 'result'
-      this.syncState()
-    } else if (this.level === 2) {
-      this.moveEnemy()
-    }
-  }
-
-  moveEnemy(): void {
-    this.targetX = Math.floor(Math.random() * 200) + 50
-    this.targetY = Math.floor(Math.random() * 400) + 100
-    this.syncState()
-  }
-
-  stopAllTimers(): void {
-    if (this.timer !== null) {
-      clearInterval(this.timer)
-      this.timer = null
-    }
-    if (this.countdownTimer !== null) {
-      clearInterval(this.countdownTimer)
-      this.countdownTimer = null
-    }
-  }
-
-  resumeGameTimers(): void {
-    this.stopAllTimers()
-    if (this.level === 3) {
-      this.timer = setInterval((): void => { this.moveEnemy() }, 800)
-    }
-    this.countdownTimer = setInterval((): void => {
-      this.timeLeft -= 1
-      this.syncState()
-      if (this.timeLeft <= 0) {
-        this.stopAllTimers()
-        this.page = 'result'
-        this.syncState()
-      }
-    }, 1000)
-  }
-
-  startGame(lv: number): void {
-    this.level = lv
-    this.hp = 100
-    this.score = 0
-    this.timeLeft = 10
-    this.page = 'game'
-    this.moveEnemy()
-    this.syncState()
-    this.resumeGameTimers()
-  }
-
-  startContinuation(): void {
-    const token = AppStorage.get<number>('continuationToken') ?? -1
-    if (token === -1) {
-      promptAction.showToast({ message: '流转服务未就绪' })
+    const notepadState = AppStorage.get('notepadState')
+    if (notepadState && notepadState['currentNoteIndex'] >= 0) {
+      router.pushUrl({ url: 'pages/Notepad' })
       return
     }
-    continuationManager.startDeviceManager(token)
-      .then(() => {
-        promptAction.showToast({ message: '请选择目标设备继续游戏' })
-      })
-      .catch(() => {
-        promptAction.showToast({ message: '流转失败，请确认设备已组网' })
-      })
   }
 
   @Builder
-  HomeContent() {
-    Column({ space: 20 }) {
-      Text('枪战训练营')
-        .fontSize(this.currentBreakpoint === 'sm' ? 32 : 40)
-        .fontWeight(FontWeight.Bold)
-      Text('一次开发 · 多端部署 · 自由流转')
+  HeaderSection() {
+    Column({ space: 8 }) {
+      Text('HarmonyOS 开源实践')
         .fontSize(14)
         .fontColor('#666666')
-      Button('第一关：定点靶').width(this.currentBreakpoint === 'sm' ? 240 : 280)
-        .onClick(() => this.startGame(1))
-      Button('第二关：闪现靶').width(this.currentBreakpoint === 'sm' ? 240 : 280)
-        .onClick(() => this.startGame(2))
-      Button('第三关：移动靶').width(this.currentBreakpoint === 'sm' ? 240 : 280)
-        .onClick(() => this.startGame(3))
+        .letterSpacing(2)
+      Text('一次开发 · 多端部署 · 自由流转')
+        .fontSize(this.currentBreakpoint === 'sm' ? 24 : 32)
+        .fontWeight(FontWeight.Bold)
+        .textAlign(TextAlign.Center)
+      Text('中山大学 开源软件设计课程 Lab1')
+        .fontSize(13)
+        .fontColor('#999999')
     }
     .width('100%')
-    .justifyContent(FlexAlign.Center)
+    .padding({ top: 40, bottom: 20 })
     .alignItems(HorizontalAlign.Center)
   }
 
   @Builder
-  StatsPanel() {
+  AppCard(
+    icon: string,
+    title: string,
+    description: string,
+    tags: string[],
+    bgColor: string,
+    routeUrl: string
+  ) {
     Column({ space: 12 }) {
-      Text('游戏信息').fontSize(22).fontWeight(FontWeight.Bold)
-      Text(`当前断点: ${this.currentBreakpoint.toUpperCase()}`)
-        .fontSize(14).fontColor('#007DFF')
-      Text(`关卡: ${this.level}`)
-        .fontSize(18)
-      Text(`时间: ${this.timeLeft}s`)
-        .fontSize(18)
-      Text(`血量: ${this.hp}`)
-        .fontSize(18)
-      Text(`分数: ${this.score}`)
-        .fontSize(18)
+      // 图标
+      Text(icon)
+        .fontSize(48)
+
+      // 标题
+      Text(title)
+        .fontSize(this.currentBreakpoint === 'sm' ? 20 : 24)
         .fontWeight(FontWeight.Bold)
-      Button('流转到其他设备')
-        .width('100%')
+
+      // 描述
+      Text(description)
+        .fontSize(13)
+        .fontColor('#666666')
+        .maxLines(3)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .textAlign(TextAlign.Center)
+
+      // 标签
+      Row({ space: 6 }) {
+        ForEach(tags, (tag: string) => {
+          Text(tag)
+            .fontSize(10)
+            .fontColor('#FFFFFF')
+            .backgroundColor('#007DFF')
+            .borderRadius(10)
+            .padding({ left: 10, right: 10, top: 3, bottom: 3 })
+        })
+      }
+
+      Blank()
+
+      // 进入按钮
+      Button('进入应用 →')
+        .fontSize(15)
         .backgroundColor('#007DFF')
-        .onClick(() => this.startContinuation())
-      Button('返回首页')
+        .fontColor(Color.White)
         .width('100%')
-        .onClick(() => {
-          this.stopAllTimers()
-          this.page = 'home'
-          this.syncState()
-        })
-    }
-    .width('100%')
-    .padding(16)
-    .backgroundColor('#FFFFFF')
-    .borderRadius(12)
-  }
-
-  @Builder
-  GameArea() {
-    Stack() {
-      Rect({ width: 40, height: 40 })
-        .radius(20).fill(Color.Red)
-        .position({ x: 5, y: 0 })
-        .onClick(() => this.hit(100))
-      Rect({ width: 50, height: 70 })
-        .fill(Color.Blue)
-        .position({ x: 0, y: 40 })
-        .onClick(() => this.hit(50))
-      Rect({ width: 80, height: 20 })
-        .fill(Color.Gray)
-        .position({ x: -15, y: 50 })
-        .onClick(() => this.hit(20))
-    }
-    .width(50)
-    .height(120)
-    .position({ x: this.targetX, y: this.targetY })
-    .animation({ duration: 300 })
-  }
-
-  @Builder
-  GameContent() {
-    if (this.currentBreakpoint === 'sm') {
-      Column() {
-        Text(`关卡 ${this.level} | ${this.timeLeft}s | HP ${this.hp}`)
-          .fontSize(16).margin(10)
-        Text(`分数: ${this.score}`).fontSize(16).margin({ bottom: 10 })
-        Stack() {
-          this.GameArea()
-        }
-        .width('100%')
-        .height(400)
-        .backgroundColor('#E8E8E8')
         .borderRadius(8)
-        .margin({ left: 16, right: 16 })
-        Row({ space: 12 }) {
-          Button('流转').backgroundColor('#007DFF').onClick(() => this.startContinuation())
-          Button('返回').onClick(() => {
-            this.stopAllTimers()
-            this.page = 'home'
-            this.syncState()
-          })
-        }.margin({ top: 20 })
-      }
-      .width('100%')
-      .height('100%')
-    } else {
-      Row({ space: 16 }) {
-        Column() {
-          this.StatsPanel()
-        }
-        .width('30%')
-        .height('100%')
-        .justifyContent(FlexAlign.Center)
-
-        Column() {
-          Text('射击区域').fontSize(20).fontWeight(FontWeight.Bold).margin({ bottom: 12 })
-          Stack() {
-            this.GameArea()
-          }
-          .width('100%')
-          .height('80%')
-          .backgroundColor('#E8E8E8')
-          .borderRadius(12)
-        }
-        .layoutWeight(1)
-        .height('100%')
-        .padding(16)
-      }
-      .width('100%')
-      .height('100%')
-      .padding(16)
-    }
-  }
-
-  @Builder
-  ResultContent() {
-    Column({ space: 20 }) {
-      Text(this.hp <= 0 ? '目标击杀！' : '时间到，任务失败')
-        .fontSize(30)
-      Text(`最终得分: ${this.score}`)
-        .fontSize(20)
-      Button('返回首页')
         .onClick(() => {
-          this.page = 'home'
-          this.syncState()
+          router.pushUrl({ url: routeUrl })
         })
     }
     .width('100%')
-    .justifyContent(FlexAlign.Center)
+    .height(this.currentBreakpoint === 'sm' ? 260 : 320)
+    .padding(20)
+    .backgroundColor(bgColor)
+    .borderRadius(16)
+    .shadow({ radius: 12, color: '#15000000', offsetY: 4 })
+  }
+
+  @Builder
+  FooterSection() {
+    Column({ space: 8 }) {
+      Divider().strokeWidth(1).color('#E0E0E0')
+      Text(`当前设备断点: ${this.currentBreakpoint.toUpperCase()}`)
+        .fontSize(12)
+        .fontColor('#007DFF')
+      Text(`sm(手机) | md(折叠屏/小平板) | lg(平板/PC)`)
+        .fontSize(10)
+        .fontColor('#BBBBBB')
+      Text('开发者: 25307023')
+        .fontSize(12)
+        .fontColor('#999999')
+        .margin({ top: 4 })
+      Text('DevEco Studio 5.0+ · HarmonyOS NEXT API 12+')
+        .fontSize(10)
+        .fontColor('#BBBBBB')
+    }
+    .width('100%')
+    .padding({ top: 8, bottom: 16 })
     .alignItems(HorizontalAlign.Center)
   }
 
   build() {
     GridRow({
       columns: { sm: 4, md: 8, lg: 12 },
+      gutter: { x: { sm: 12, md: 20, lg: 24 } },
       breakpoints: {
         value: ['320vp', '600vp', '840vp'],
         reference: BreakpointsReference.WindowSize
       }
     }) {
       GridCol({ span: { sm: 4, md: 8, lg: 12 } }) {
-        Column() {
-          if (this.page === 'home') {
-            this.HomeContent()
-          } else if (this.page === 'game') {
-            this.GameContent()
+        Column({ space: 16 }) {
+          // 顶部标题
+          this.HeaderSection()
+
+          // 应用选择区 —— 响应式布局
+          if (this.currentBreakpoint === 'sm') {
+            // 手机：纵向排列两个应用卡片
+            Column({ space: 16 }) {
+              this.AppCard(
+                '🔫',
+                '枪战训练营',
+                '射击小游戏，支持三关难度挑战和多设备流转继续游戏',
+                ['游戏', '多端部署', '自由流转'],
+                '#FFF3E0',
+                'pages/ShootingGame'
+              )
+              this.AppCard(
+                '📝',
+                '协作便签',
+                '跨设备便签应用，支持创建、编辑便签并流转到其他设备继续编辑',
+                ['生产力', '多端部署', '自由流转'],
+                '#E8F5E9',
+                'pages/Notepad'
+              )
+            }
+            .padding({ left: 16, right: 16 })
           } else {
-            this.ResultContent()
+            // 平板：两个应用卡片横向并排
+            Row({ space: 20 }) {
+              Column() {
+                this.AppCard(
+                  '🔫',
+                  '枪战训练营',
+                  '射击小游戏，支持三关难度挑战。使用 GridRow/GridCol 实现手机平板自适应布局，通过 distributedDataObject 实现游戏状态跨设备流转。',
+                  ['游戏', '多端部署', '自由流转'],
+                  '#FFF3E0',
+                  'pages/ShootingGame'
+                )
+              }
+              .layoutWeight(1)
+
+              Column() {
+                this.AppCard(
+                  '📝',
+                  '协作便签',
+                  '跨设备便签应用，支持创建彩色便签、编辑内容。响应式栅格布局适配多端，分布式数据对象实现编辑状态无缝流转。',
+                  ['生产力', '多端部署', '自由流转'],
+                  '#E8F5E9',
+                  'pages/Notepad'
+                )
+              }
+              .layoutWeight(1)
+            }
+            .padding({ left: 24, right: 24 })
           }
+
+          // 底部信息
+          this.FooterSection()
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('#F0F0F0')
+        .backgroundColor('#FAFAFA')
+        .justifyContent(FlexAlign.SpaceBetween)
       }
     }
     .width('100%')

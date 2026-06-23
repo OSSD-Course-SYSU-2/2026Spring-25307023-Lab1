@@ -5,9 +5,20 @@ import { window } from '@kit.ArkUI'
 import { BusinessError } from '@kit.BasicServicesKit'
 import { GameState } from '../common/GameState'
 import { GameStateManager } from '../common/GameStateManager'
+import { NotepadState } from '../common/NotepadState'
+import { NotepadManager } from '../common/NotepadManager'
 
 const DOMAIN = 0x0000
 const TAG = 'EntryAbility'
+
+/**
+ * 当前活跃的应用类型，用于判断流转时保存/恢复哪个应用的状态
+ */
+enum ActiveApp {
+  NONE = 'none',
+  SHOOTING_GAME = 'shootingGame',
+  NOTEPAD = 'notepad'
+}
 
 export default class EntryAbility extends UIAbility {
   private dObject?: distributedDataObject.DataObject
@@ -65,30 +76,47 @@ export default class EntryAbility extends UIAbility {
   }
 
   /**
-   * 自由流转：源端保存游戏状态到分布式数据对象
+   * 自由流转：源端保存当前活跃应用的状态到分布式数据对象
+   * 同时保存射击游戏和便签两个应用的状态，对端根据 activeApp 字段恢复
    */
   async onContinue(wantParam: Record<string, Object>): Promise<AbilityConstant.OnContinueResult> {
-    const manager = GameStateManager.getInstance()
-    const current = manager.getFromAppStorage()
+    const gameManager = GameStateManager.getInstance()
+    const notepadManager = NotepadManager.getInstance()
+    const gameCurrent = gameManager.getFromAppStorage()
+    const notepadCurrent = notepadManager.getFromAppStorage()
 
-    const source = new GameState(
-      current?.page ?? 'game',
-      current?.level ?? 1,
-      current?.score ?? 0,
-      current?.hp ?? 100,
-      current?.targetX ?? 150,
-      current?.targetY ?? 300,
-      current?.timeLeft ?? 10
+    // 保存射击游戏状态
+    const gameState = new GameState(
+      gameCurrent?.page ?? 'home',
+      gameCurrent?.level ?? 1,
+      gameCurrent?.score ?? 0,
+      gameCurrent?.hp ?? 100,
+      gameCurrent?.targetX ?? 150,
+      gameCurrent?.targetY ?? 300,
+      gameCurrent?.timeLeft ?? 10
     )
 
-    this.dObject = distributedDataObject.create(this.context, source)
+    // 保存便签状态
+    const notepadState = new NotepadState(
+      notepadCurrent?.notes ?? [],
+      notepadCurrent?.currentNoteIndex ?? -1,
+      notepadCurrent?.scrollOffset ?? 0
+    )
+
+    // 合并为一个流转状态对象
+    const continuationPayload = {
+      gameState: gameState,
+      notepadState: notepadState
+    }
+
+    this.dObject = distributedDataObject.create(this.context, continuationPayload)
     const dataSessionId: string = distributedDataObject.genSessionId()
     this.dObject.setSessionId(dataSessionId)
     wantParam['dataSessionId'] = dataSessionId
 
     try {
       await this.dObject.save(wantParam.targetDevice as string)
-      hilog.info(DOMAIN, TAG, 'Game state saved for continuation, sessionId: %{public}s', dataSessionId)
+      hilog.info(DOMAIN, TAG, 'Continuation state saved, sessionId: %{public}s', dataSessionId)
     } catch (err) {
       hilog.error(DOMAIN, TAG, 'Failed to save distributed object: %{public}s', JSON.stringify(err))
       return AbilityConstant.OnContinueResult.REJECT
@@ -97,8 +125,11 @@ export default class EntryAbility extends UIAbility {
     return AbilityConstant.OnContinueResult.AGREE
   }
 
+  /**
+   * 对端恢复：从分布式数据对象恢复两个应用的状态
+   */
   private handleDistributedRestore(want: Want): void {
-    const remoteSource = new GameState(undefined, undefined, undefined, undefined, undefined, undefined, undefined)
+    const remoteSource = {}
     this.dObject = distributedDataObject.create(this.context, remoteSource)
 
     let dataSessionId = ''
@@ -109,18 +140,29 @@ export default class EntryAbility extends UIAbility {
     this.dObject.on('status', (sessionId: string, networkId: string, status: 'online' | 'offline' | 'restored') => {
       hilog.info(DOMAIN, TAG, 'Distributed status: %{public}s', status)
       if (status === 'restored' && this.dObject) {
-        const restored = new GameState(
-          this.dObject['page'] as string,
-          this.dObject['level'] as number,
-          this.dObject['score'] as number,
-          this.dObject['hp'] as number,
-          this.dObject['targetX'] as number,
-          this.dObject['targetY'] as number,
-          this.dObject['timeLeft'] as number
+        // 恢复射击游戏状态
+        const gameState = new GameState(
+          this.dObject['gameState']?.['page'] as string,
+          this.dObject['gameState']?.['level'] as number,
+          this.dObject['gameState']?.['score'] as number,
+          this.dObject['gameState']?.['hp'] as number,
+          this.dObject['gameState']?.['targetX'] as number,
+          this.dObject['gameState']?.['targetY'] as number,
+          this.dObject['gameState']?.['timeLeft'] as number
         )
-        GameStateManager.getInstance().notifyRestored(restored)
+        GameStateManager.getInstance().notifyRestored(gameState)
         hilog.info(DOMAIN, TAG, 'Game state restored: level=%{public}d score=%{public}d',
-          restored.level ?? 0, restored.score ?? 0)
+          gameState.level ?? 0, gameState.score ?? 0)
+
+        // 恢复便签状态
+        const notepadState = new NotepadState(
+          this.dObject['notepadState']?.['notes'] as [],
+          this.dObject['notepadState']?.['currentNoteIndex'] as number,
+          this.dObject['notepadState']?.['scrollOffset'] as number
+        )
+        NotepadManager.getInstance().notifyRestored(notepadState)
+        hilog.info(DOMAIN, TAG, 'Notepad state restored: notes=%{public}d currentIndex=%{public}d',
+          notepadState.notes.length, notepadState.currentNoteIndex)
       }
     })
 

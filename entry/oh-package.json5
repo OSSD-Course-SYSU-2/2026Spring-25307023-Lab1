@@ -1,9 +1,9 @@
 {
   "name": "entry",
   "version": "1.0.0",
-  "description": "HarmonyOS shooting game with multi-device deployment and continuation",
+  "description": "HarmonyOS multi-app demo: Shooting Game & Collaborative Notepad with multi-device deployment and continuation",
   "main": "",
   "author": "25307023",
-  "license": "",
+  "license": "MIT",
   "dependencies": {}
 }
