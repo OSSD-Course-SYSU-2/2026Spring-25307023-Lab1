@@ -1,0 +1,20 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "枪战训练营 - 一次开发多端部署与自由流转实践"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "HarmonyOS shooting game entry"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "枪战训练营"
+    },
+    {
+      "name": "distributed_permission_reason",
+      "value": "用于跨设备流转游戏状态"
+    }
+  ]
+}

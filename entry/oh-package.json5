@@ -1,0 +1,9 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "HarmonyOS shooting game with multi-device deployment and continuation",
+  "main": "",
+  "author": "25307023",
+  "license": "",
+  "dependencies": {}
+}

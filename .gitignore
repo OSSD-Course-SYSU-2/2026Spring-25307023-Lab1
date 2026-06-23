@@ -1,0 +1,10 @@
+# Build and IDE
+entry/build/
+.hvigor/
+.idea/
+*.hap
+*.app
+
+# OS
+.DS_Store
+Thumbs.db
